@@ -47,11 +47,12 @@ pub fn resolve_collisions(particles: &mut Vec<Particle>, grid: &HashMap<CellCoor
                                 let impact = dvx * nx + dvy * ny;
 
                                 if impact < 0.0 {
-                                    let impulse = 0.5 * impact;
-                                    p1.vx += impulse * nx;
-                                    p1.vy += impulse * ny;
-                                    p2.vx -= impulse * nx;
-                                    p2.vy -= impulse * ny;
+let damping = 0.9; // Add damping factor
+let impulse = damping * 0.5 * impact;
+p1.vx += impulse * nx;
+p1.vy += impulse * ny;
+p2.vx -= impulse * nx;
+p2.vy -= impulse * ny;
                                 }
                             }
                         }
@@ -61,4 +62,3 @@ pub fn resolve_collisions(particles: &mut Vec<Particle>, grid: &HashMap<CellCoor
         }
     }
 }
-
