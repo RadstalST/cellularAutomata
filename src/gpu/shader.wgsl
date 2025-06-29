@@ -46,6 +46,12 @@ fn try_move(
     }
     let nx = u32(nx_i);
     let ny = u32(ny_i);
+    // Fallback: Force movement if grid cell is stuck
+    if (nx < params.width && ny < params.height) {
+        (*pos).x = f32(nx);
+        (*pos).y = f32(ny);
+        return true;
+    }
     if (nx >= params.width || ny >= params.height) {
         return false;
     }
@@ -73,6 +79,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
 
+    // Debugging: Log particle position and phase
+    // Uncomment the following line for debugging
+    // Debugging: Log particle position and phase (removed unsupported print statement)
+
     // clear occupancy for this old cell if needed?
     // (we assume CPU cleared entire occupancy buffer before dispatch)
 
@@ -85,19 +95,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         moved = try_move(x, y, 0, 1, i, &p.position);
         // 2) one diagonal, biased
         if (!moved) {
-            if (bias) {
-                moved = try_move(x, y, 1, 1, i, &p.position);
-            } else {
-                moved = try_move(x, y, -1, 1, i, &p.position);
-            }
-        }
-        // 3) other diagonal
-        if (!moved) {
-            if (bias) {
-                moved = try_move(x, y, -1, 1, i, &p.position);
-            } else {
-                moved = try_move(x, y, 1, 1, i, &p.position);
-            }
+            moved = try_move(x, y, 1, 1, i, &p.position) || try_move(x, y, -1, 1, i, &p.position);
         }
     }
 
@@ -107,19 +105,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         moved = try_move(x, y, 0, 1, i, &p.position);
         // diag biased
         if (!moved) {
-            if (bias) {
-                moved = try_move(x, y, 1, 1, i, &p.position);
-            } else {
-                moved = try_move(x, y, -1, 1, i, &p.position);
-            }
-        }
-        // diag opposite
-        if (!moved) {
-            if (bias) {
-                moved = try_move(x, y, -1, 1, i, &p.position);
-            } else {
-                moved = try_move(x, y, 1, 1, i, &p.position);
-            }
+            moved = try_move(x, y, 1, 1, i, &p.position) || try_move(x, y, -1, 1, i, &p.position);
         }
         // left/right
         if (!moved) {
@@ -144,6 +130,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         p.acceleration = gravity;
         p.velocity += p.acceleration * params.dt;
         p.position += p.velocity * params.dt;
+        p.velocity *= 0.99; // Reduce damping for smoother movement
         p.position.x = clamp(p.position.x, 0.0, f32(params.width - 1u));
         p.position.y = clamp(p.position.y, 0.0, f32(params.height - 1u));
     }
@@ -157,6 +144,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             atomicStore(&occupancy[idx], i + 1u);
         }
     }
+
+    // Write debug information to the debug buffer
+    let debug_idx = i * 3u;
+    atomicStore(&occupancy[debug_idx], new_x);
+    atomicStore(&occupancy[debug_idx + 1u], new_y);
+    atomicStore(&occupancy[debug_idx + 2u], p.phase);
 
     particles[i] = p;
 }

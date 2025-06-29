@@ -93,6 +93,15 @@ pub async fn dispatch_particles(
         mapped_at_creation: false,
     });
 
+    // Debug buffer for particle positions and phases
+    let debug_buffer_size = (gpu_particles.len() * std::mem::size_of::<u32>() * 3) as wgpu::BufferAddress;
+    let debug_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("DebugBuffer"),
+        size: debug_buffer_size,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
     // 4) Uniforms
     let params = SimParams { dt: 0.016, width: 300, height: 300 };
     let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

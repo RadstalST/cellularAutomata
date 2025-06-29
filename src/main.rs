@@ -51,7 +51,7 @@ fn spawn_particles(materials: &[Material], count: usize, width: usize, height: u
         while !placed && attempts < max_attempts {
             let x = rng.gen_range(50..(width - 50));
             let y = rng.gen_range(0..100);
-            if !grid.is_occupied(x, y) {
+            if x < width && y < height && !grid.is_occupied(x, y) {
                 grid.set(x, y, Some(i));
                 particles.push(Particle {
                     position: Vec2::new(x as f32, y as f32),
