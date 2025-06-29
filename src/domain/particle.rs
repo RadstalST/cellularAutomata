@@ -1,4 +1,5 @@
 use crate::domain::vec2::Vec2;
+use bytemuck::{Pod, Zeroable};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
@@ -6,6 +7,29 @@ pub enum Phase {
     Liquid,
     Gas,
     Plasma,
+}
+
+impl From<u32> for Phase {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => Phase::Solid,
+            1 => Phase::Liquid,
+            2 => Phase::Gas,
+            3 => Phase::Plasma,
+            _ => Phase::Solid,
+        }
+    }
+}
+
+impl From<Phase> for u32 {
+    fn from(phase: Phase) -> Self {
+        match phase {
+            Phase::Solid => 0,
+            Phase::Liquid => 1,
+            Phase::Gas => 2,
+            Phase::Plasma => 3,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -20,8 +44,9 @@ pub struct Particle {
     pub color: u32,
 }
 
+/// GPU-safe version (must match WGSL layout exactly)
 #[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct GpuParticle {
     pub position: [f32; 2],
     pub velocity: [f32; 2],
@@ -31,6 +56,7 @@ pub struct GpuParticle {
     pub temperature: f32,
     pub phase: u32,
     pub color: u32,
+    _padding: u32, // <-- 4-byte padding for 16-byte alignment
 }
 
 impl From<Particle> for GpuParticle {
@@ -42,8 +68,9 @@ impl From<Particle> for GpuParticle {
             mass: p.mass,
             radius: p.radius,
             temperature: p.temperature,
-            phase: p.phase as u32,
+            phase: p.phase.into(),
             color: p.color,
+            _padding: 0,
         }
     }
 }
@@ -57,13 +84,7 @@ impl From<GpuParticle> for Particle {
             mass: gp.mass,
             radius: gp.radius,
             temperature: gp.temperature,
-            phase: match gp.phase {
-                0 => Phase::Solid,
-                1 => Phase::Liquid,
-                2 => Phase::Gas,
-                3 => Phase::Plasma,
-                _ => Phase::Solid,
-            },
+            phase: gp.phase.into(),
             color: gp.color,
         }
     }

@@ -59,30 +59,40 @@ pub async fn dispatch_particles(
 
     // Step 3: Create bind group layout & pipeline
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("BindGroupLayout"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
+    label: Some("BindGroupLayout"),
+    entries: &[
+        wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                has_dynamic_offset: false,
+                min_binding_size: None,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 1,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
             },
-        ],
-    });
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 2,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        },
+    ],
+});
 
     let params = SimParams {
         dt: 0.016,
@@ -94,6 +104,12 @@ pub async fn dispatch_particles(
         label: Some("ParamsBuffer"),
         contents: bytemuck::cast_slice(&[params]),
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
+    let occupancy_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("OccupancyBuffer"),
+        size: (params.width * params.height * std::mem::size_of::<u32>() as u32) as wgpu::BufferAddress,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
     });
 
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -107,6 +123,10 @@ pub async fn dispatch_particles(
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: params_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: occupancy_buffer.as_entire_binding(),
             },
         ],
     });
@@ -139,7 +159,8 @@ let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDesc
 
     // Step 5: Copy result to output buffer
     encoder.copy_buffer_to_buffer(&staging_buffer, 0, &output_buffer, 0, size);
-
+    let zero_occupancy = vec![0u32; (params.width * params.height) as usize];
+    queue.write_buffer(&occupancy_buffer, 0, bytemuck::cast_slice(&zero_occupancy));
     queue.submit(Some(encoder.finish()));
 
     // Step 6: Read back results
