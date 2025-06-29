@@ -16,7 +16,7 @@ mod utils {
     pub mod colors;
 }
 
-use domain::particle::{Particle, Phase};
+use domain::particle::Particle;
 use domain::vec2::Vec2;
 use domain::material::{Material, SAND, WATER};
 use grid::grid::Grid;
@@ -25,32 +25,50 @@ use minifb::{Key, Window, WindowOptions};
 use utils::colors::phase_color;
 use rand::Rng;
 
-const WIDTH: usize = 300;
+const WIDTH: usize = 500;
 const HEIGHT: usize = 300;
-const NUM_PARTICLES: usize = 50000;
+const NUM_PARTICLES: usize = 10000;
 const DT: f32 = 0.008; 
 
-fn spawn_particles(materials: &[Material], count: usize, width: usize, height: usize) -> Vec<Particle> {
+pub fn spawn_particles(
+    materials: &[Material],
+    count: usize,
+    width: usize,
+    height: usize,
+    grid: &mut Grid,
+) -> Vec<Particle> {
     let mut rng = rand::thread_rng();
+    let mut particles = Vec::with_capacity(count);
 
-    (0..count)
-        .map(|i| {
-            let material = materials[i % materials.len()];
-            Particle {
-                position: Vec2::new(
-                    rng.gen_range(50.0..(width as f32 - 50.0)),
-                    rng.gen_range(0.0..100.0),
-                ),
-                velocity: Vec2::zero(),
-                acceleration: Vec2::zero(),
-                mass: material.mass,
-                radius: 1.0,
-                temperature: 20.0,
-                phase: material.phase,
-                color: phase_color(material.base_color, material.phase),
+    let mut attempts = 0;
+    let max_attempts = count * 10;
+
+    for i in 0..count {
+        let material = materials[i % materials.len()];
+        let mut placed = false;
+
+        while !placed && attempts < max_attempts {
+            let x = rng.gen_range(50..(width - 50));
+            let y = rng.gen_range(0..100);
+            if !grid.is_occupied(x, y) {
+                grid.set(x, y, Some(i));
+                particles.push(Particle {
+                    position: Vec2::new(x as f32, y as f32),
+                    velocity: Vec2::zero(),
+                    acceleration: Vec2::zero(),
+                    mass: material.mass,
+                    radius: 1.0,
+                    temperature: 20.0,
+                    phase: material.phase,
+                    color: phase_color(material.base_color, material.phase),
+                });
+                placed = true;
             }
-        })
-        .collect()
+            attempts += 1;
+        }
+    }
+
+    particles
 }
 
 fn main() {
@@ -58,9 +76,10 @@ fn main() {
     let mut window = Window::new("Physics Particle Sim", WIDTH, HEIGHT, WindowOptions::default())
         .expect("Failed to create window");
 
-    let materials = [SAND, SAND, SAND, WATER];
-    let mut particles = spawn_particles(&materials, NUM_PARTICLES, WIDTH, HEIGHT);
+    let materials = [SAND,WATER, WATER];
     let mut grid = Grid::new(WIDTH, HEIGHT);
+    let mut particles = spawn_particles(&materials, NUM_PARTICLES, WIDTH, HEIGHT, &mut grid);
+
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         buffer.fill(0x000000);

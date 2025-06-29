@@ -7,25 +7,18 @@ use rand::random;
 pub fn update_particles(particles: &mut [Particle], grid: &mut Grid, dt: f32) {
     grid.clear();
 
-    // Pass 1: Liquids
+    let mut solid_indices = Vec::new();
+
     for (i, p) in particles.iter_mut().enumerate() {
-        if matches!(p.phase, Phase::Liquid) {
-            update_liquid_particle(p, i, grid);
+        match p.phase {
+            Phase::Liquid => update_liquid_particle(p, i, grid),
+            Phase::Solid => solid_indices.push(i),
+            Phase::Gas | Phase::Plasma => update_gas_particle(p, i, grid, dt),
         }
     }
 
-    // Pass 2: Solids
-    for i in 0..particles.len() {
-        if matches!(particles[i].phase, Phase::Solid) {
-            update_solid_particle(i, particles, grid);
-        }
-    }
-
-    // Pass 3: Gas and Plasma
-    for (i, p) in particles.iter_mut().enumerate() {
-        if matches!(p.phase, Phase::Gas | Phase::Plasma) {
-            update_gas_particle(p, i, grid, dt);
-        }
+    for i in solid_indices {
+        update_solid_particle(i, particles, grid);
     }
 }
 pub fn update_liquid_particle(p: &mut Particle, i: usize, grid: &mut Grid) {

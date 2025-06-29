@@ -14,17 +14,13 @@ impl Grid {
         }
     }
 
-    pub fn index(&self, x: usize, y: usize) -> Option<usize> {
-        if x < self.width && y < self.height {
-            Some(y * self.width + x)
-        } else {
-            None
-        }
-    }
+pub fn index(&self, x: usize, y: usize) -> Option<usize> {
+    (x < self.width && y < self.height).then(|| y * self.width + x)
+}
 
-    pub fn is_occupied(&self, x: usize, y: usize) -> bool {
-        self.index(x, y).map_or(false, |i| self.cells[i].is_some())
-    }
+pub fn is_occupied(&self, x: usize, y: usize) -> bool {
+    (x < self.width && y < self.height) && self.cells[y * self.width + x].is_some()
+}
 
     pub fn get(&self, x: usize, y: usize) -> Option<usize> {
         self.index(x, y).and_then(|i| self.cells[i])
@@ -36,9 +32,7 @@ impl Grid {
         }
     }
 
-    pub fn clear(&mut self) {
-        for cell in self.cells.iter_mut() {
-            *cell = None;
-        }
-    }
+pub fn clear(&mut self) {
+    self.cells.fill(None);
+}
 }
