@@ -1,77 +1,83 @@
-mod domain;
-mod usecase;
+// src/main.rs
+mod domain {
+    pub mod vec2;
+    pub mod particle;
+}
 
-use domain::particle::{Particle, ParticleType};
+mod grid {
+    pub mod grid;
+}
+
+mod usecase {
+    pub mod update;
+}
+
+use domain::particle::{Particle, Phase};
+use domain::vec2::Vec2;
+use grid::grid::Grid;
+use usecase::update::update_particles;
 use minifb::{Key, Window, WindowOptions};
 use rand::Rng;
-use std::collections::HashMap;
-use usecase::collision::{resolve_collisions, CellCoord};
 
 const WIDTH: usize = 300;
 const HEIGHT: usize = 300;
-const NUM_PARTICLES: usize = 1000;
-const RADIUS: f32 = 3.0;
-const CELL_SIZE: usize = 8;
+const NUM_PARTICLES: usize = 100000;
+const DT: f32 = 0.016;
 
 fn main() {
-    let mut buffer = vec![0; WIDTH * HEIGHT];
-    let mut window = Window::new("Pixel Sim", WIDTH, HEIGHT, WindowOptions::default()).unwrap();
+    let mut buffer = vec![0x000000; WIDTH * HEIGHT];
+    let mut window = Window::new("Physics Particle Sim", WIDTH, HEIGHT, WindowOptions::default())
+        .expect("Failed to create window");
 
     let mut rng = rand::thread_rng();
-fn initialize_particles() -> Vec<Particle> {
-    let mut rng = rand::thread_rng();
-    (0..NUM_PARTICLES)
+    let mut particles: Vec<Particle> = (0..NUM_PARTICLES)
         .map(|i| {
-            let kind = match i % 3 {
-                0 => ParticleType::Sand,
-                1 => ParticleType::Water,
-                _ => ParticleType::Fire,
+            let phase = match i % 2 {
+                0 => Phase::Solid,
+                1 => Phase::Liquid,
+                2 => Phase::Gas,
+                3 => Phase::Liquid,
+                _ => Phase::Plasma,
             };
-            let color = match kind {
-                ParticleType::Sand => 0xC2B280,
-                ParticleType::Water => 0x3399FF,
-                ParticleType::Fire => 0xFF6600,
+            let color = match phase {
+                Phase::Solid => 0x888888,
+                Phase::Liquid => 0x0000FF,
+                Phase::Gas => 0x00FF00, // Green for gas
+                Phase::Plasma => 0xFF0000, // Red for plasma
             };
-
             Particle {
-                x: rng.gen_range(100.0..200.0),
-                y: rng.gen_range(0.0..10.0),
-                vx: rng.gen_range(-1.0..1.0),
-                vy: rng.gen_range(0.0..2.0),
-                kind,
+                position: Vec2::new(rng.gen_range(50.0..250.0), rng.gen_range(0.0..100.0)),
+                velocity: Vec2::zero(),
+                acceleration: Vec2::zero(),
+                mass: if phase == Phase::Gas {
+                    0.0001
+                } else if phase == Phase::Plasma {
+                    0.00001
+                } else if phase == Phase::Liquid {
+                    0.001
+                } else {
+                    1.0
+                },
+                radius: 1.0,
+                temperature: 20.0,
+                phase,
                 color,
             }
         })
-        .collect()
-}
+        .collect();
 
-let mut particles = initialize_particles();
+    let mut grid = Grid::new(WIDTH, HEIGHT);
 
-    use std::time::{Duration, Instant};
+    while window.is_open() && !window.is_key_down(Key::Escape) {
+        buffer.fill(0x000000);
+        update_particles(&mut particles, &mut grid, DT);
 
-let mut last_reinit = Instant::now();
-
-while window.is_open() && !window.is_key_down(Key::Escape) {
-        buffer.fill(0);
-
-// Debounce logic for "R" key
-if window.is_key_down(Key::R) && last_reinit.elapsed() > Duration::from_millis(300) {
-    particles = initialize_particles();
-    last_reinit = Instant::now();
-}
-
-        let mut grid: HashMap<CellCoord, Vec<usize>> = HashMap::new();
-        for (i, p) in particles.iter().enumerate() {
-            let cx = (p.x / CELL_SIZE as f32).floor() as i32;
-            let cy = (p.y / CELL_SIZE as f32).floor() as i32;
-            grid.entry((cx, cy)).or_default().push(i);
-        }
-
-        resolve_collisions(&mut particles, &grid, RADIUS);
-
-        for p in particles.iter_mut() {
-            p.update(WIDTH, HEIGHT);
-            p.draw(&mut buffer, WIDTH, HEIGHT);
+        for p in particles.iter() {
+            let x = p.position.x as usize;
+            let y = p.position.y as usize;
+            if x < WIDTH && y < HEIGHT {
+                buffer[y * WIDTH + x] = p.color;
+            }
         }
 
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
