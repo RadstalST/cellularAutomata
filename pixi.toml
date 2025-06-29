@@ -1,0 +1,10 @@
+[workspace]
+authors = ["suchat tangjarukij <suchat.tangjarukij@gmail.com>"]
+channels = ["conda-forge"]
+name = "cellularAutomata"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
