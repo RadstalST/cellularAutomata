@@ -66,7 +66,7 @@ fn main() {
                 radius: 1.0,
                 temperature: 20.0,
                 phase,
-                color:noisy_color(color, 4),
+                color:phase_color(color,phase),
 
             }
         })

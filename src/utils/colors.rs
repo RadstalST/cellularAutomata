@@ -1,43 +1,78 @@
 // src/util/color.rs
 use rand::Rng;
 
-pub fn noisy_color(base: u32, max_variation: u8) -> u32 {
+/// Applies color noise and optional visual enhancements.
+#[allow(clippy::too_many_arguments)]
+pub fn noisy_color(
+    base: u32,
+    max_variation_r: Option<u8>,
+    max_variation_g: Option<u8>,
+    max_variation_b: Option<u8>,
+    darken_factor: Option<f32>,
+    lighten_amount: Option<f32>,
+    vibrancy_factor: Option<f32>,
+    rand_range_darken: Option<(f32, f32)>,
+    rand_range_lighten: Option<(f32, f32)>,
+    rand_range_vibrancy: Option<(f32, f32)>,
+) -> u32 {
     let mut rng = rand::thread_rng();
 
-    let r = ((base >> 16) & 0xFF) as i32 + rng.gen_range(0..=max_variation as i32);
-    let g = ((base >> 8) & 0xFF) as i32 + rng.gen_range(0..=max_variation as i32);
-    let b = (base & 0xFF) as i32 + rng.gen_range(0..=max_variation as i32);
+    let vr = max_variation_r.unwrap_or(12) as i32;
+    let vg = max_variation_g.unwrap_or(10) as i32;
+    let vb = max_variation_b.unwrap_or(8) as i32;
+
+    let r = ((base >> 16) & 0xFF) as i32 + rng.gen_range(0..=vr);
+    let g = ((base >> 8) & 0xFF) as i32 + rng.gen_range(0..=vg);
+    let b = (base & 0xFF) as i32 + rng.gen_range(0..=vb);
 
     let clamp = |v: i32| v.clamp(0, 255) as u32;
-
     let mut color = (clamp(r) << 16) | (clamp(g) << 8) | clamp(b);
 
-    // 🎨 Random darken/lighten and vibrancy
-    let factor = rng.gen_range(0.7..=1.3);
-    let amount = rng.gen_range(0.0..=0.2);
-    let vibrancy_factor = rng.gen_range(0.5..=1.5);
+    // 🎨 Choose enhancement values
+    let darken_f = darken_factor.unwrap_or_else(|| {
+        rand_range_darken
+            .map(|(min, max)| rng.gen_range(min..=max))
+            .unwrap_or(0.9)
+    });
 
-    color = vibrancy(color, vibrancy_factor);
-    color = darken(color, factor);
-    color = lighten(color, amount);
+    let lighten_a = lighten_amount.unwrap_or_else(|| {
+        rand_range_lighten
+            .map(|(min, max)| rng.gen_range(min..=max))
+            .unwrap_or(0.1)
+    });
+
+    let vibrancy_f = vibrancy_factor.unwrap_or_else(|| {
+        rand_range_vibrancy
+            .map(|(min, max)| rng.gen_range(min..=max))
+            .unwrap_or(1.2)
+    });
+
+    color = vibrancy(color, vibrancy_f);
+    color = darken(color, darken_f);
+    color = lighten(color, lighten_a);
 
     color
 }
 
-pub fn phase_color(phase: crate::domain::particle::Phase) -> u32 {
-    let base = match phase {
-        crate::domain::particle::Phase::Solid  => 0x8B4513,
-        crate::domain::particle::Phase::Liquid => 0x3399FF,
-        crate::domain::particle::Phase::Gas    => 0xCCCCCC,
-        crate::domain::particle::Phase::Plasma => 0xFF3399,
-    };
+pub fn phase_color(base: u32, phase: crate::domain::particle::Phase) -> u32 {
     let noise = match phase {
-        crate::domain::particle::Phase::Solid  => 8,
-        crate::domain::particle::Phase::Liquid => 12,
-        crate::domain::particle::Phase::Gas    => 20,
-        crate::domain::particle::Phase::Plasma => 30,
+        crate::domain::particle::Phase::Solid  => (Some(12), Some(10), Some(8)),
+        crate::domain::particle::Phase::Liquid => (Some(16), Some(14), Some(12)),
+        crate::domain::particle::Phase::Gas    => (Some(22), Some(20), Some(18)),
+        crate::domain::particle::Phase::Plasma => (Some(32), Some(30), Some(28)),
     };
-    noisy_color(base, noise)
+    noisy_color(
+        base,
+        noise.0,
+        noise.1,
+        noise.2,
+        None,
+        None,
+        None,
+        Some((0.8, 1.2)),
+        Some((0.05, 0.2)),
+        Some((0.5, 1.6))
+    )
 }
 
 pub fn darken(color: u32, factor: f32) -> u32 {
