@@ -11,6 +11,9 @@ mod grid {
 mod usecase {
     pub mod update;
 }
+mod utils {
+    pub mod colors;
+}
 
 use domain::particle::{Particle, Phase};
 use domain::vec2::Vec2;
@@ -21,8 +24,10 @@ use rand::Rng;
 
 const WIDTH: usize = 300;
 const HEIGHT: usize = 300;
-const NUM_PARTICLES: usize = 100000;
-const DT: f32 = 0.016;
+const NUM_PARTICLES: usize = 10000;
+const DT: f32 = 0.016* 0.5; // 30 FPSs
+
+use utils::colors::{noisy_color, darken, lighten, phase_color};
 
 fn main() {
     let mut buffer = vec![0x000000; WIDTH * HEIGHT];
@@ -61,7 +66,8 @@ fn main() {
                 radius: 1.0,
                 temperature: 20.0,
                 phase,
-                color,
+                color:noisy_color(color, 4),
+
             }
         })
         .collect();
