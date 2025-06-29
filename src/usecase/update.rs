@@ -28,11 +28,11 @@ pub fn update_particles(particles: &mut [Particle], grid: &mut Grid, dt: f32) {
         }
     }
 }
-
-fn update_liquid_particle(p: &mut Particle, i: usize, grid: &mut Grid) {
+pub fn update_liquid_particle(p: &mut Particle, i: usize, grid: &mut Grid) {
     let x = p.position.x.floor() as usize;
     let y = p.position.y.floor() as usize;
 
+    // 1. Try moving down
     if y + 1 < grid.height && !grid.is_occupied(x, y + 1) {
         p.position.y += 1.0;
         grid.set(x, y + 1, Some(i));
@@ -40,6 +40,8 @@ fn update_liquid_particle(p: &mut Particle, i: usize, grid: &mut Grid) {
     }
 
     let directions = if random::<bool>() { [-1, 1] } else { [1, -1] };
+
+    // 2. Try moving diagonally down-left or down-right
     for dx in directions {
         let new_x = x.wrapping_add_signed(dx);
         if new_x < grid.width && y + 1 < grid.height && !grid.is_occupied(new_x, y + 1) {
@@ -50,6 +52,7 @@ fn update_liquid_particle(p: &mut Particle, i: usize, grid: &mut Grid) {
         }
     }
 
+    // 3. Try moving left or right
     for dx in directions {
         let new_x = x.wrapping_add_signed(dx);
         if new_x < grid.width && !grid.is_occupied(new_x, y) {
@@ -59,6 +62,7 @@ fn update_liquid_particle(p: &mut Particle, i: usize, grid: &mut Grid) {
         }
     }
 
+    // 4. No move possible, stay in place
     grid.set(x, y, Some(i));
 }
 
