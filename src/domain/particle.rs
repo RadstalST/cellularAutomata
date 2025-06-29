@@ -20,6 +20,55 @@ pub struct Particle {
     pub color: u32,
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct GpuParticle {
+    pub position: [f32; 2],
+    pub velocity: [f32; 2],
+    pub acceleration: [f32; 2],
+    pub mass: f32,
+    pub radius: f32,
+    pub temperature: f32,
+    pub phase: u32,
+    pub color: u32,
+}
+
+impl From<Particle> for GpuParticle {
+    fn from(p: Particle) -> Self {
+        Self {
+            position: [p.position.x, p.position.y],
+            velocity: [p.velocity.x, p.velocity.y],
+            acceleration: [p.acceleration.x, p.acceleration.y],
+            mass: p.mass,
+            radius: p.radius,
+            temperature: p.temperature,
+            phase: p.phase as u32,
+            color: p.color,
+        }
+    }
+}
+
+impl From<GpuParticle> for Particle {
+    fn from(gp: GpuParticle) -> Self {
+        Self {
+            position: Vec2::new(gp.position[0], gp.position[1]),
+            velocity: Vec2::new(gp.velocity[0], gp.velocity[1]),
+            acceleration: Vec2::new(gp.acceleration[0], gp.acceleration[1]),
+            mass: gp.mass,
+            radius: gp.radius,
+            temperature: gp.temperature,
+            phase: match gp.phase {
+                0 => Phase::Solid,
+                1 => Phase::Liquid,
+                2 => Phase::Gas,
+                3 => Phase::Plasma,
+                _ => Phase::Solid,
+            },
+            color: gp.color,
+        }
+    }
+}
+
 impl Particle {
     pub fn apply_force(&mut self, force: Vec2) {
         let acc = force.scale(1.0 / self.mass);
