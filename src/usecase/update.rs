@@ -4,21 +4,28 @@ use crate::domain::vec2::Vec2;
 use crate::grid::grid::Grid;
 use rand::random;
 
+use rayon::prelude::*;
+use std::sync::{Arc, Mutex};
+
 pub fn update_particles(particles: &mut [Particle], grid: &mut Grid, dt: f32) {
-    grid.clear();
+    let grid = Arc::new(Mutex::new(grid));
+    grid.lock().unwrap().clear();
 
-    let mut solid_indices = Vec::new();
+    let solid_indices = Arc::new(Mutex::new(Vec::new()));
 
-    for (i, p) in particles.iter_mut().enumerate() {
+    particles.par_iter_mut().enumerate().for_each(|(i, p)| {
+        let mut grid = grid.lock().unwrap();
         match p.phase {
-            Phase::Liquid => update_liquid_particle(p, i, grid),
-            Phase::Solid => solid_indices.push(i),
-            Phase::Gas | Phase::Plasma => update_gas_particle(p, i, grid, dt),
+            Phase::Liquid => update_liquid_particle(p, i, &mut grid),
+            Phase::Solid => solid_indices.lock().unwrap().push(i),
+            Phase::Gas | Phase::Plasma => update_gas_particle(p, i, &mut grid, dt),
         }
-    }
+    });
 
+    let solid_indices = Arc::try_unwrap(solid_indices).unwrap().into_inner().unwrap();
+    let mut grid = grid.lock().unwrap();
     for i in solid_indices {
-        update_solid_particle(i, particles, grid);
+        update_solid_particle(i, particles, &mut grid);
     }
 }
 pub fn update_liquid_particle(p: &mut Particle, i: usize, grid: &mut Grid) {

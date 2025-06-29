@@ -25,10 +25,10 @@ use minifb::{Key, Window, WindowOptions};
 use utils::colors::phase_color;
 use rand::Rng;
 
-const WIDTH: usize = 500;
+const WIDTH: usize = 300;
 const HEIGHT: usize = 300;
 const NUM_PARTICLES: usize = 10000;
-const DT: f32 = 0.008; 
+const DT: f32 = 0.0; 
 
 pub fn spawn_particles(
     materials: &[Material],
@@ -76,7 +76,7 @@ fn main() {
     let mut window = Window::new("Physics Particle Sim", WIDTH, HEIGHT, WindowOptions::default())
         .expect("Failed to create window");
 
-    let materials = [SAND,WATER, WATER];
+    let materials = [SAND,WATER,WATER,WATER,WATER,WATER];
     let mut grid = Grid::new(WIDTH, HEIGHT);
     let mut particles = spawn_particles(&materials, NUM_PARTICLES, WIDTH, HEIGHT, &mut grid);
 
