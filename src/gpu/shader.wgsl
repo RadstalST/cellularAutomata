@@ -1,3 +1,5 @@
+// src/gpu/shader.wgsl
+
 struct Particle {
     position: vec2<f32>,
     velocity: vec2<f32>,
@@ -17,20 +19,44 @@ struct SimParams {
 
 @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
 @group(0) @binding(1) var<uniform> params: SimParams;
-@group(0) @binding(2) var<storage, read_write> occupancy: array<u32>;
+// occupancy grid of atomic<u32>, 0 = free, >0 = particle_id+1
+@group(0) @binding(2) var<storage, read_write> occupancy: array<atomic<u32>>;
+
+// a very cheap pseudo-random bit from the particle index
+fn rand_bit(i: u32) -> bool {
+    // linear congruential step, then pick bit 16
+    return (((i * 1103515245u + 12345u) >> 16u) & 1u) == 1u;
+}
 
 fn get_index(x: u32, y: u32, width: u32) -> u32 {
     return y * width + x;
 }
 
-fn is_occupied(x: u32, y: u32) -> bool {
-    let idx = get_index(x, y, params.width);
-    return occupancy[idx] != 0u;
-}
-
-fn set_occupied(x: u32, y: u32, particle_id: u32) {
-    let idx = get_index(x, y, params.width);
-    occupancy[idx] = particle_id + 1u;
+// try to atomically claim (x+dx, y+dy). On success advance *pos, return true.
+fn try_move(
+    x: u32, y: u32,
+    dx: i32, dy: i32,
+    id: u32,
+    pos: ptr<function, vec2<f32>>
+) -> bool {
+    let nx_i = i32(x) + dx;
+    let ny_i = i32(y) + dy;
+    if (nx_i < 0 || ny_i < 0) {
+        return false;
+    }
+    let nx = u32(nx_i);
+    let ny = u32(ny_i);
+    if (nx >= params.width || ny >= params.height) {
+        return false;
+    }
+    let idx = get_index(nx, ny, params.width);
+    // if grid was zero, atomicMin returns old=0 => we claim it
+    if (atomicMin(&occupancy[idx], id + 1u) == 0u) {
+        (*pos).x += f32(dx);
+        (*pos).y += f32(dy);
+        return true;
+    }
+    return false;
 }
 
 @compute @workgroup_size(64)
@@ -43,131 +69,93 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     var p = particles[i];
     var x = u32(floor(p.position.x));
     var y = u32(floor(p.position.y));
-
     if (x >= params.width || y >= params.height) {
         return;
     }
 
+    // clear occupancy for this old cell if needed?
+    // (we assume CPU cleared entire occupancy buffer before dispatch)
+
+    let bias = rand_bit(i);
     var moved = false;
 
-    // Solid (e.g., SAND)
+    // --- SOLID (SAND) behavior ---
     if (p.phase == 0u) {
-        if (y + 1u < params.height && !is_occupied(x, y + 1u)) {
-            y = y + 1u;
-            p.position.y += 1.0;
-            moved = true;
-        }
-
-        // Diagonal left
+        // 1) straight down
+        moved = try_move(x, y, 0, 1, i, &p.position);
+        // 2) one diagonal, biased
         if (!moved) {
-            let dx = -1;
-            let nx = i32(x) + dx;
-            let ny = i32(y) + 1;
-            if (nx >= 0 && u32(nx) < params.width && u32(ny) < params.height &&
-                !is_occupied(u32(nx), u32(ny))) {
-                p.position.x += f32(dx);
-                p.position.y += 1.0;
-                x = u32(nx);
-                y = u32(ny);
-                moved = true;
+            if (bias) {
+                moved = try_move(x, y, 1, 1, i, &p.position);
+            } else {
+                moved = try_move(x, y, -1, 1, i, &p.position);
             }
         }
-
-        // Diagonal right
+        // 3) other diagonal
         if (!moved) {
-            let dx = 1;
-            let nx = i32(x) + dx;
-            let ny = i32(y) + 1;
-            if (nx >= 0 && u32(nx) < params.width && u32(ny) < params.height &&
-                !is_occupied(u32(nx), u32(ny))) {
-                p.position.x += f32(dx);
-                p.position.y += 1.0;
-                x = u32(nx);
-                y = u32(ny);
-                moved = true;
+            if (bias) {
+                moved = try_move(x, y, -1, 1, i, &p.position);
+            } else {
+                moved = try_move(x, y, 1, 1, i, &p.position);
             }
         }
     }
 
-    // Liquid (e.g., WATER)
+    // --- LIQUID (WATER) behavior ---
     if (p.phase == 1u) {
-        if (y + 1u < params.height && !is_occupied(x, y + 1u)) {
-            y = y + 1u;
-            p.position.y += 1.0;
-            moved = true;
-        }
-
-        // Diagonal left
+        // down
+        moved = try_move(x, y, 0, 1, i, &p.position);
+        // diag biased
         if (!moved) {
-            let dx = -1;
-            let nx = i32(x) + dx;
-            let ny = i32(y) + 1;
-            if (nx >= 0 && u32(nx) < params.width && u32(ny) < params.height &&
-                !is_occupied(u32(nx), u32(ny))) {
-                p.position.x += f32(dx);
-                p.position.y += 1.0;
-                x = u32(nx);
-                y = u32(ny);
-                moved = true;
+            if (bias) {
+                moved = try_move(x, y, 1, 1, i, &p.position);
+            } else {
+                moved = try_move(x, y, -1, 1, i, &p.position);
             }
         }
-
-        // Diagonal right
+        // diag opposite
         if (!moved) {
-            let dx = 1;
-            let nx = i32(x) + dx;
-            let ny = i32(y) + 1;
-            if (nx >= 0 && u32(nx) < params.width && u32(ny) < params.height &&
-                !is_occupied(u32(nx), u32(ny))) {
-                p.position.x += f32(dx);
-                p.position.y += 1.0;
-                x = u32(nx);
-                y = u32(ny);
-                moved = true;
+            if (bias) {
+                moved = try_move(x, y, -1, 1, i, &p.position);
+            } else {
+                moved = try_move(x, y, 1, 1, i, &p.position);
             }
         }
-
-        // Horizontal left
+        // left/right
         if (!moved) {
-            let dx = -1;
-            let nx = i32(x) + dx;
-            if (nx >= 0 && u32(nx) < params.width &&
-                !is_occupied(u32(nx), y)) {
-                p.position.x += f32(dx);
-                x = u32(nx);
-                moved = true;
+            if (bias) {
+                moved = try_move(x, y, 1, 0, i, &p.position);
+            } else {
+                moved = try_move(x, y, -1, 0, i, &p.position);
             }
         }
-
-        // Horizontal right
         if (!moved) {
-            let dx = 1;
-            let nx = i32(x) + dx;
-            if (nx >= 0 && u32(nx) < params.width &&
-                !is_occupied(u32(nx), y)) {
-                p.position.x += f32(dx);
-                x = u32(nx);
-                moved = true;
+            if (bias) {
+                moved = try_move(x, y, -1, 0, i, &p.position);
+            } else {
+                moved = try_move(x, y, 1, 0, i, &p.position);
             }
         }
     }
 
-    // Gas / Plasma
+    // --- GAS / PLASMA behavior ---
     if (p.phase == 2u || p.phase == 3u) {
         let gravity = vec2<f32>(0.0, -9.8);
         p.acceleration = gravity;
         p.velocity += p.acceleration * params.dt;
         p.position += p.velocity * params.dt;
-
         p.position.x = clamp(p.position.x, 0.0, f32(params.width - 1u));
         p.position.y = clamp(p.position.y, 0.0, f32(params.height - 1u));
-
-        x = u32(floor(p.position.x));
-        y = u32(floor(p.position.y));
     }
 
-    if (x < params.width && y < params.height) {
-        set_occupied(x, y, i);
+    // Write our new position into the occupancy grid
+    let new_x = u32(floor(p.position.x));
+    let new_y = u32(floor(p.position.y));
+    if (new_x < params.width && new_y < params.height) {
+        let idx = get_index(new_x, new_y, params.width);
+        if (p.phase == 0u || p.phase == 1u) {
+            atomicStore(&occupancy[idx], i + 1u);
+        }
     }
 
     particles[i] = p;

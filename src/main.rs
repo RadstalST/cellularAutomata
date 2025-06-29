@@ -93,13 +93,22 @@ fn main() {
     let materials = [SAND, WATER, WATER, WATER, SAND];
     let mut grid = Grid::new(WIDTH, HEIGHT);
     let mut particles = spawn_particles(&materials, NUM_PARTICLES, WIDTH, HEIGHT, &mut grid);
+    let mut occupancy = vec![0u32; WIDTH * HEIGHT];
 
     // Initialize GPU context (block on async)
     let (device, queue, shader) = pollster::block_on(initialize_gpu());
 
     // Main simulation loop
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        particles = pollster::block_on(dispatch_particles(&device, &queue, &shader, &particles));
+        let (updated_particles, updated_occupancy) = pollster::block_on(dispatch_particles(
+            &device,
+            &queue,
+            &shader,
+            &particles,
+            &occupancy,
+        ));
+        particles = updated_particles;
+        occupancy = updated_occupancy;
         render_particles(&mut buffer, &particles);
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
     }
